@@ -20,7 +20,7 @@ num_cams = 7
 pts_dim = 3
 
 dataset_type = 'OpenLaneV2_subset_A_Dataset'
-data_root = './data/OpenLane-V2/'
+data_root = '/home/ircvlab-504/TopoLogic_Lightning/data/OpenLane-V2/'
 
 para_method = 'fix_pts_interp'
 method_para = dict(n_points=11)
