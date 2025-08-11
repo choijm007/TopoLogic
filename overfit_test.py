@@ -42,12 +42,10 @@ def main():
 
     trainer = pl.Trainer(
         max_epochs=cfg.total_epochs,
-        accelerator='gpu',
-        devices=1,
+        accelerator='cpu',
         logger=logger,
         callbacks=[checkpoint_callback],
-        # 디버깅을 위해 빠른 실행 모드 (1개의 배치만 학습 및 검증)
-        #fast_dev_run=True,
+        overfit_batches=1,
     )
 
     # 5. 학습 시작

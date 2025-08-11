@@ -155,21 +155,19 @@ class TopoLogicPL(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         losses = self.forward(batch)
-        total_loss = 0
+        total_loss = sum(losses.values())
         for k, v in losses.items():
-            self.log(f'train/{k}', v, on_step=True, on_epoch=True, prog_bar=False, logger=True)
-            total_loss += v
-        self.log('train/total_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+            self.log(f'train/{k}', v.detach(), on_step=True, on_epoch=True, prog_bar=False, logger=True)
+        self.log('train/total_loss', total_loss.detach(), on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return total_loss
 
 
     def validation_step(self, batch, batch_idx):
         losses = self.forward(batch)
-        total_loss = 0
+        total_loss = sum(losses.values())
         for k, v in losses.items():
-            self.log(f'train/{k}', v, on_step=True, on_epoch=True, prog_bar=False, logger=True)
-            total_loss += v
-        self.log('train/total_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+            self.log(f'val/{k}', v.detach(), on_step=True, on_epoch=True, prog_bar=False, logger=True)
+        self.log('val/total_loss', total_loss.detach(), on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return total_loss
 
     def on_test_start(self):
