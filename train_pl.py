@@ -1,11 +1,10 @@
 import pytorch_lightning as pl
 from mmcv import Config
-from projects.topologic.datasets.pl_datasets import TopoLogicDataModule
 from projects.topologic.models.detectors.pl_topologic import TopoLogicPL
-
+from projects.topologic.datasets.pl_dataset import TopoLogicDataModule
 def main():
     # 1. 설정 파일 경로 지정
-    cfg_path = '/home/ircvlab-504/TopoLogic/projects/configs/topologic_r50_8x1_24e_olv2_subset_A.py'
+    cfg_path = '/home/ircvlab-504/TopoLogic_Lightning/projects/configs/topologic_r50_8x1_24e_olv2_subset_A.py'
     cfg = Config.fromfile(cfg_path)
 
     # 2. 데이터 모듈 초기화
@@ -16,8 +15,8 @@ def main():
         batch_size=cfg.data.samples_per_gpu,
         num_workers=cfg.data.workers_per_gpu,
         queue_length=cfg.data.train.get('queue_length', 1),
-        pipeline=cfg.train_pipeline,
-        val_pipeline=cfg.test_pipeline, # 검증/테스트 파이프라인 전달
+        train_pipeline=cfg.train_pipeline,
+        test_pipeline=cfg.test_pipeline,
         modality=cfg.input_modality,
         classes=cfg.class_names,
     )

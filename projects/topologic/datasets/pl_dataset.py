@@ -33,7 +33,7 @@ def collate_wrapper(batch):
 
 class TopoLogicDataModule(pl.LightningDataModule):
     def __init__(self, data_root, ann_file, batch_size, num_workers, queue_length=1,
-                 filter_empty_te=False, split='train', filter_map_change=False, **kwargs):
+                 filter_empty_te=False, split='train', filter_map_change=False, train_pipeline=None, test_pipeline=None, **kwargs):
         super().__init__()
         self.data_root = data_root
         self.ann_file = ann_file
@@ -43,11 +43,15 @@ class TopoLogicDataModule(pl.LightningDataModule):
         self.filter_empty_te = filter_empty_te
         self.split = split
         self.filter_map_change = filter_map_change
+        self.train_pipeline = train_pipeline
+        self.test_pipeline = test_pipeline
         self.kwargs = kwargs
         self.collate_fn = collate_wrapper
 
     def setup(self, stage=None):
         if stage == 'fit' or stage is None:
+            train_kwargs = self.kwargs.copy()
+            train_kwargs['pipeline'] = self.train_pipeline
             self.train_dataset = OpenLaneV2_subset_A_Dataset(
                 data_root=self.data_root,
                 ann_file=self.ann_file,
@@ -55,26 +59,33 @@ class TopoLogicDataModule(pl.LightningDataModule):
                 filter_empty_te=self.filter_empty_te,
                 split='train',
                 filter_map_change=self.filter_map_change,
-                **self.kwargs
+                **train_kwargs
             )
+            
+            val_kwargs = self.kwargs.copy()
+            val_kwargs['pipeline'] = self.test_pipeline
             self.val_dataset = OpenLaneV2_subset_A_Dataset(
                 data_root=self.data_root,
-                ann_file=self.ann_file,
+                ann_file=self.ann_file.replace('train', 'val'),
                 queue_length=self.queue_length,
                 filter_empty_te=self.filter_empty_te,
                 split='val',
                 filter_map_change=self.filter_map_change,
-                **self.kwargs
+                test_mode=True,
+                **val_kwargs
             )
         if stage == 'test' or stage is None:
+            test_kwargs = self.kwargs.copy()
+            test_kwargs['pipeline'] = self.test_pipeline
             self.test_dataset = OpenLaneV2_subset_A_Dataset(
                 data_root=self.data_root,
-                ann_file=self.ann_file,
+                ann_file=self.ann_file.replace('train', 'val'),
                 queue_length=self.queue_length,
                 filter_empty_te=self.filter_empty_te,
                 split='test',
                 filter_map_change=self.filter_map_change,
-                **self.kwargs
+                test_mode=True,
+                **test_kwargs
             )
 
     def train_dataloader(self):
