@@ -2,6 +2,9 @@ import pytorch_lightning as pl
 from mmcv import Config
 from projects.topologic.models.detectors.pl_topologic import TopoLogicPL
 from projects.topologic.datasets.pl_dataset import TopoLogicDataModule
+import random
+import numpy as np
+import torch
 def main():
     # 1. 설정 파일 경로 지정
     cfg_path = '/home/ircvlab-504/TopoLogic_Lightning/projects/configs/topologic_r50_8x1_24e_olv2_subset_A.py'
@@ -11,10 +14,10 @@ def main():
     # 설정 파일에서 val_pipeline을 명시적으로 전달합니다.
     data_module = TopoLogicDataModule(
         data_root=cfg.data_root,
-        ann_file=cfg.data.train.ann_file,
+        data=cfg.data,
         batch_size=cfg.data.samples_per_gpu,
         num_workers=cfg.data.workers_per_gpu,
-        queue_length=cfg.data.train.get('queue_length', 1),
+        queue_length=1,
         train_pipeline=cfg.train_pipeline,
         test_pipeline=cfg.test_pipeline,
         modality=cfg.input_modality,
@@ -53,4 +56,9 @@ def main():
     print("--- Training Finished ---")
 
 if __name__ == '__main__':
+    seed = 0
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     main()

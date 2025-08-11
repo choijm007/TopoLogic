@@ -92,14 +92,24 @@ class TopoLogicPL(pl.LightningModule):
 
         return img_feats_reshaped
 
+
     def forward(self, batch):
+
         img = batch['img'][0]
         img_metas = batch['img_metas'][0]
+        gt_bboxes = batch['gt_bboxes'][0]
+        gt_labels = batch['gt_labels'][0]
+        gt_lanes_3d = batch['gt_lanes_3d'][0]
+        gt_lane_labels_3d = batch['gt_lane_labels_3d'][0]
+        gt_lane_adj = batch['gt_lane_adj'][0]
+        gt_lane_lcte_adj = batch['gt_lane_lcte_adj'][0]
 
         len_queue = img.size(1)
+        img_metas = batch['img_metas'][0]
         img_metas = [each[len_queue - 1] for each in img_metas]
 
         img = img[:, -1, ...]
+
 
         img_feats = self.extract_feat(img)
 
@@ -116,36 +126,12 @@ class TopoLogicPL(pl.LightningModule):
             img_meta['batch_input_shape'] = batch_input_shape
 
         bbox_outs = self.bbox_head(front_view_img_feats, bbox_img_metas)
+        te_losses = {}
 
-
+        bbox_losses, te_assign_result = self.bbox_head.loss(bbox_outs, gt_bboxes, gt_labels, bbox_img_metas,
+                                                            gt_bboxes_ignore=None)
         te_feats = bbox_outs['history_states']
         te_cls_scores = bbox_outs['all_cls_scores']
-
-        prev_bev = None
-        bev_feats = self.bev_constructor(img_feats, img_metas, prev_bev)
-        outs = self.pts_bbox_head(img_feats, bev_feats, img_metas, te_feats, te_cls_scores)
-
-
-        return {**bbox_outs, **outs}
-
-    def training_step(self, batch, batch_idx):
-
-        img_metas = batch['img_metas'][0]
-        gt_bboxes = batch['gt_bboxes'][0]
-        gt_labels = batch['gt_labels'][0]
-        gt_lanes_3d = batch['gt_lanes_3d'][0]
-        gt_lane_labels_3d = batch['gt_lane_labels_3d'][0]
-        gt_lane_adj = batch['gt_lane_adj'][0]
-        gt_lane_lcte_adj = batch['gt_lane_lcte_adj'][0]
-
-
-        pred_dict = self.forward(batch)
-        te_losses = {}
-        losses = dict()
-        bbox_losses, te_assign_result = self.bbox_head.loss(preds_dict, gt_bboxes, gt_labels, bbox_img_metas,
-                                                            gt_bboxes_ignore=None)
-        loss_inputs = [pred_dict, gt_lanes_3d, gt_lane_labels_3d, gt_lane_adj, gt_lane_lcte_adj, te_assign_result]
-        lane_losses = self.pts_bbox_head.loss(*loss_inputs, img_metas=img_metas)
 
         for loss in bbox_losses:
             te_losses['bbox_head.' + loss] = bbox_losses[loss]
@@ -155,39 +141,35 @@ class TopoLogicPL(pl.LightningModule):
             for loss in te_losses:
                 te_losses[loss] *= 0
 
+        losses = dict()
+        prev_bev = None
+        bev_feats = self.bev_constructor(img_feats, img_metas, prev_bev)
+        outs = self.pts_bbox_head(img_feats, bev_feats, img_metas, te_feats, te_cls_scores)
+        loss_inputs = [outs, gt_lanes_3d, gt_lane_labels_3d, gt_lane_adj, gt_lane_lcte_adj, te_assign_result]
+        lane_losses = self.pts_bbox_head.loss(*loss_inputs, img_metas=img_metas)
+
         for loss in lane_losses:
             losses['lane_head.' + loss] = lane_losses[loss]
         losses.update(te_losses)
+        return losses
 
+    def training_step(self, batch, batch_idx):
+        losses = self.forward(batch)
+        total_loss = 0
         for k, v in losses.items():
             self.log(f'train/{k}', v, on_step=True, on_epoch=True, prog_bar=False, logger=True)
             total_loss += v
         self.log('train/total_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-
-        return losses
+        return total_loss
 
 
     def validation_step(self, batch, batch_idx):
-        # In validation, we also do not use temporal logic
-        preds_dict = self.forward(batch)
-        bbox_losses, te_assign_result = self.bbox_head.loss(
-            preds_dict, batch['gt_bboxes'], batch['gt_labels'],
-            batch['img_metas'], gt_bboxes_ignore=None
-        )
-        lane_losses = self.lane_head.loss(
-            preds_dict, batch['gt_lanes_3d'], batch['gt_lane_labels_3d'],
-            batch['gt_lane_adj'], batch['gt_lane_lcte_adj'], te_assign_result
-        )
-        losses = {}
-        for k, v in bbox_losses.items():
-            losses[f'bbox_head.{k}'] = v
-        for k, v in lane_losses.items():
-            losses[f'lane_head.{k}'] = v
+        losses = self.forward(batch)
         total_loss = 0
         for k, v in losses.items():
-            self.log(f'val/{k}', v, on_epoch=True, prog_bar=False, logger=True)
+            self.log(f'train/{k}', v, on_step=True, on_epoch=True, prog_bar=False, logger=True)
             total_loss += v
-        self.log('val/total_loss', total_loss, on_epoch=True, prog_bar=True, logger=True)
+        self.log('train/total_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return total_loss
 
     def on_test_start(self):

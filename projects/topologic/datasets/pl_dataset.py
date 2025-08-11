@@ -32,11 +32,11 @@ def collate_wrapper(batch):
 
 
 class TopoLogicDataModule(pl.LightningDataModule):
-    def __init__(self, data_root, ann_file, batch_size, num_workers, queue_length=1,
+    def __init__(self, data_root, data, batch_size, num_workers, queue_length=1,
                  filter_empty_te=False, split='train', filter_map_change=False, train_pipeline=None, test_pipeline=None, **kwargs):
         super().__init__()
         self.data_root = data_root
-        self.ann_file = ann_file
+        self.data = data
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.queue_length = queue_length
@@ -54,7 +54,7 @@ class TopoLogicDataModule(pl.LightningDataModule):
             train_kwargs['pipeline'] = self.train_pipeline
             self.train_dataset = OpenLaneV2_subset_A_Dataset(
                 data_root=self.data_root,
-                ann_file=self.ann_file,
+                ann_file=self.data.train.ann_file,
                 queue_length=self.queue_length,
                 filter_empty_te=self.filter_empty_te,
                 split='train',
@@ -63,15 +63,15 @@ class TopoLogicDataModule(pl.LightningDataModule):
             )
             
             val_kwargs = self.kwargs.copy()
-            val_kwargs['pipeline'] = self.test_pipeline
+            val_kwargs['pipeline'] = self.train_pipeline
             self.val_dataset = OpenLaneV2_subset_A_Dataset(
                 data_root=self.data_root,
-                ann_file=self.ann_file.replace('train', 'val'),
+                ann_file=self.data.val.ann_file,
                 queue_length=self.queue_length,
                 filter_empty_te=self.filter_empty_te,
                 split='val',
                 filter_map_change=self.filter_map_change,
-                test_mode=True,
+                test_mode=False,
                 **val_kwargs
             )
         if stage == 'test' or stage is None:
@@ -79,7 +79,7 @@ class TopoLogicDataModule(pl.LightningDataModule):
             test_kwargs['pipeline'] = self.test_pipeline
             self.test_dataset = OpenLaneV2_subset_A_Dataset(
                 data_root=self.data_root,
-                ann_file=self.ann_file.replace('train', 'val'),
+                ann_file=self.data.test.ann_file,
                 queue_length=self.queue_length,
                 filter_empty_te=self.filter_empty_te,
                 split='test',
