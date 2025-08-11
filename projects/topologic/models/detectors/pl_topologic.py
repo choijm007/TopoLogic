@@ -1,7 +1,10 @@
 import pytorch_lightning as pl
 from mmcv import Config
 from mmdet.models import build_detector
+from pytorch_lightning.utilities.types import STEP_OUTPUT
 
+from projects.topologic.models.dense_heads import TopoLogicHead
+from projects.topologic import CustomDeformableDETRHead
 from projects.topologic.models.modules.bevformer_constructer import BEVFormerConstructer
 from projects.bevformer import BEVFormerEncoder
 from projects.topologic.utils.builder import build_bev_constructor
@@ -10,6 +13,10 @@ from mmdet.models.backbones import ResNet
 from mmdet.models.necks import FPN
 import torch
 import random
+
+
+def build(cfg):
+    return cfg.pop("type")
 
 class TopoLogicPL(pl.LightningModule):
     def __init__(self, cfg_path):
@@ -20,8 +27,8 @@ class TopoLogicPL(pl.LightningModule):
         self.save_hyperparameters(cfg_dict)
 
         model_cfg = self.hparams.model
-        # 'type' 키는 mmcv 설정에서 클래스를 지정하는 데 사용되지만,
-        # 클래스 생성자에는 전달되지 않아야 하므로 제거합니다.
+
+        # --- Backbone and Neck ---
         img_backbone_cfg = model_cfg.img_backbone.copy()
         img_backbone_cfg.pop('type', None)
         self.img_backbone = ResNet(**img_backbone_cfg)
@@ -34,10 +41,22 @@ class TopoLogicPL(pl.LightningModule):
         else:
             self.with_img_neck = False
 
+        # --- BEV Constructor ---
         bev_constructor_cfg = model_cfg.bev_constructor.copy()
         bev_constructor_cfg.pop('type')
-
         self.bev_constructor = BEVFormerConstructer(**bev_constructor_cfg)
+
+        # --- Bbox Head ---
+        bbox_head_cfg = model_cfg.bbox_head.copy()
+        bbox_head_cfg.pop('type')
+        bbox_head_cfg.update(train_cfg=model_cfg.train_cfg.bbox)
+        self.bbox_head = CustomDeformableDETRHead(**bbox_head_cfg)
+
+        # --- Lane Head ---
+        lane_head_cfg = model_cfg.lane_head.copy()
+        lane_head_cfg.pop('type')
+        lane_head_cfg.update(train_cfg=model_cfg.train_cfg.lane)
+        self.pts_bbox_head = TopoLogicHead(**lane_head_cfg)
 
 
     def extract_feat(self, img):
@@ -67,13 +86,13 @@ class TopoLogicPL(pl.LightningModule):
         return img_feats_reshaped
 
     def forward(self, batch):
-        img = batch['img']
-        img_metas = batch.get('img_metas')[0]
-        len_queue = 1
+        img = batch['img'][0]
+        img_metas = batch['img_metas'][0]
+
+        len_queue = img.size(1)
         img_metas = [each[len_queue - 1] for each in img_metas]
 
-        img = img[0][:, -1, ...]
-
+        img = img[:, -1, ...]
 
         img_feats = self.extract_feat(img)
 
@@ -89,12 +108,51 @@ class TopoLogicPL(pl.LightningModule):
                     crop_shape=img_meta['crop_shape'][0]))
             img_meta['batch_input_shape'] = batch_input_shape
 
+        bbox_outs = self.bbox_head(front_view_img_feats, bbox_img_metas)
+
+
+        te_feats = bbox_outs['history_states']
+        te_cls_scores = bbox_outs['all_cls_scores']
+
         prev_bev = None
-        bev_embed = self.bev_constructor(img_feats, img_metas, prev_bev)
+        bev_feats = self.bev_constructor(img_feats, img_metas, prev_bev)
+        outs = self.pts_bbox_head(img_feats, bev_feats, img_metas, te_feats, te_cls_scores)
 
 
-        return {"bev_embed" : bev_embed}
+        return {**bbox_outs, **outs}
 
+    def training_step(self, batch, batch_idx):
+
+        img_metas = batch['img_metas'][0]
+        gt_bboxes = batch['gt_bboxes'][0]
+        gt_labels = batch['gt_labels'][0]
+        gt_lanes_3d = batch['gt_lanes_3d'][0]
+        gt_lane_labels_3d = batch['gt_lane_labels_3d'][0]
+        gt_lane_adj = batch['gt_lane_adj'][0]
+        gt_lane_lcte_adj = batch['gt_lane_lcte_adj'][0]
+
+
+        pred_dict = self.forward(batch)
+        te_losses = {}
+        losses = dict()
+        bbox_losses, te_assign_result = self.bbox_head.loss(preds_dict, gt_bboxes, gt_labels, bbox_img_metas,
+                                                            gt_bboxes_ignore=None)
+        loss_inputs = [pred_dict, gt_lanes_3d, gt_lane_labels_3d, gt_lane_adj, gt_lane_lcte_adj, te_assign_result]
+        lane_losses = self.pts_bbox_head.loss(*loss_inputs, img_metas=img_metas)
+
+        for loss in bbox_losses:
+            te_losses['bbox_head.' + loss] = bbox_losses[loss]
+
+        num_gt_bboxes = sum([len(gt) for gt in gt_labels])
+        if num_gt_bboxes == 0:
+            for loss in te_losses:
+                te_losses[loss] *= 0
+
+        for loss in lane_losses:
+            losses['lane_head.' + loss] = lane_losses[loss]
+        losses.update(te_losses)
+
+        return losses
 
 if __name__ == '__main__':
     random.seed(0)
@@ -130,5 +188,8 @@ if __name__ == '__main__':
 
         output = model(data_batch)
 
-    print("\nOutput BEV embedding shape:")
-    print(output['bev_embed'].shape)
+    print("\nOutput ")
+    for k,v in output.items():
+        print(k)
+    #print(output.items())
+
