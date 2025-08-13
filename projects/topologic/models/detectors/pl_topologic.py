@@ -13,6 +13,7 @@ from mmdet.models.backbones import ResNet
 from mmdet.models.necks import FPN
 import torch
 import random
+import copy
 
 
 def build(cfg):
@@ -66,7 +67,7 @@ class TopoLogicPL(pl.LightningModule):
         }
         self.test_step_outputs = []
 
-    def extract_feat(self, img):
+    def extract_feat(self, img, img_metas=None):
         B = img.size(0)
         if img is not None:
 
@@ -96,7 +97,7 @@ class TopoLogicPL(pl.LightningModule):
     def forward(self, batch):
 
         img = batch['img'][0]
-        img_metas = batch['img_metas'][0]
+
         gt_bboxes = batch['gt_bboxes'][0]
         gt_labels = batch['gt_labels'][0]
         gt_lanes_3d = batch['gt_lanes_3d'][0]
@@ -180,7 +181,7 @@ class TopoLogicPL(pl.LightningModule):
         }
 
     def test_step(self, batch, batch_idx):
-        img_metas = batch['img_metas']
+        img_metas = batch['img_metas'][0]
         img = batch['img'][0]
         """model의 테스트 과정 정의, simple_test 함수를 호출 하여 실제 추론을 수행."""
         for var, name in [(img_metas, 'img_metas')]:
@@ -215,7 +216,7 @@ class TopoLogicPL(pl.LightningModule):
         self.prev_frame_info['prev_pos'] = tmp_pos
         self.prev_frame_info['prev_angle'] = tmp_angle
         self.prev_frame_info['prev_bev'] = new_prev_bev
-        self.test_step_outputs.append(results)
+        self.test_step_outputs.append(results_list)
         return results_list
 
 
@@ -257,7 +258,7 @@ class TopoLogicPL(pl.LightningModule):
             result_dict['bbox_results'] = bbox
             result_dict['lane_results'] = lane
             result_dict['lclc_results'] = lclc
-            result_dict['lcte_results'] = lc
+            result_dict['lcte_results'] = lcte
 
         return new_prev_bev, results_list
 
@@ -265,7 +266,11 @@ class TopoLogicPL(pl.LightningModule):
     def on_test_epoch_end(self):
         outputs = [item for sublist in self.test_step_outputs for item in sublist]
         dataset = self.trainer.datamodule.test_dataloader().dataset
-        eval_results = dataset.evaluate(outputs, logger=self.logger.experiment if self.logger else None)
+        eval_results = dataset.evaluate(outputs, logger=self.logger, interval=24, pipeline=self.hparams.test_pipeline)
+
+        print(eval_results)
+
+
         self.log_dict(eval_results)
         self.test_step_outputs.clear()
 

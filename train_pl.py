@@ -29,7 +29,8 @@ def main():
 
     # 4. Trainer 설정
     # TensorBoard 로거 설정
-    logger = pl.loggers.TensorBoardLogger("tb_logs", name="topologic_pl")
+    tb_logger = pl.loggers.TensorBoardLogger("tb_logs", name="topologic_pl")
+    csv_logger = pl.loggers.CSVLogger("tb_logs", name="topologic_pl")
 
     # 체크포인트 콜백 설정
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
@@ -44,7 +45,7 @@ def main():
         max_epochs=cfg.total_epochs,
         accelerator='gpu',
         devices=1,
-        logger=logger,
+        logger=[tb_logger, csv_logger],
         callbacks=[checkpoint_callback],
         # 디버깅을 위해 빠른 실행 모드 (1개의 배치만 학습 및 검증)
         #fast_dev_run=True,

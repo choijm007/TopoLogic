@@ -433,11 +433,11 @@ class OpenLaneV2_subset_A_Dataset(Custom3DDataset):
             self.show(results, out_dir)
             logger.info(f'Visualize done.')
 
-        logger.info(f'Starting format results...')
+        # logger.info(f'Starting format results...')
         gt_dict = self.format_openlanev2_gt()
         pred_dict = self.format_results(results)
         # pkl.dump(pred_dict, open('checkpoints/result_val.pkl', 'wb'))
-        logger.info(f'Starting openlanev2 evaluate...')
+        # logger.info(f'Starting openlanev2 evaluate...')
         metric_results = openlanev2_evaluate(gt_dict, pred_dict)
         format_metric(metric_results)
         metric_results = {

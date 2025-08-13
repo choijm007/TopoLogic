@@ -16,7 +16,7 @@ def main():
         data_root=cfg.data_root,
         data=cfg.data,
         batch_size=cfg.data.samples_per_gpu,
-        num_workers=cfg.data.workers_per_gpu,
+        num_workers=0,
         queue_length=1,
         train_pipeline=cfg.train_pipeline,
         test_pipeline=cfg.test_pipeline,
@@ -41,7 +41,7 @@ def main():
     )
 
     trainer = pl.Trainer(
-        max_epochs=cfg.total_epochs,
+        max_epochs=500,
         accelerator='cpu',
         logger=logger,
         callbacks=[checkpoint_callback],
