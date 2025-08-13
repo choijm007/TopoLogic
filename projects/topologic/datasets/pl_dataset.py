@@ -429,9 +429,9 @@ class OpenLaneV2_subset_A_Dataset(Custom3DDataset):
         # pkl.dump(total_distance, open('checkpoints/statistics_train_scatter.pkl', 'wb'))
         if show:
             assert out_dir, 'Expect out_dir when show is set.'
-            logger.info(f'Visualizing results at {out_dir}...')
+            #logger.info(f'Visualizing results at {out_dir}...')
             self.show(results, out_dir)
-            logger.info(f'Visualize done.')
+            #logger.info(f'Visualize done.')
 
         # logger.info(f'Starting format results...')
         gt_dict = self.format_openlanev2_gt()

@@ -266,7 +266,8 @@ class TopoLogicPL(pl.LightningModule):
     def on_test_epoch_end(self):
         outputs = [item for sublist in self.test_step_outputs for item in sublist]
         dataset = self.trainer.datamodule.test_dataloader().dataset
-        eval_results = dataset.evaluate(outputs, logger=self.logger, interval=24, pipeline=self.hparams.test_pipeline)
+        eval_results = dataset.evaluate(outputs, logger=self.logger, interval=24,
+                                        pipeline=self.hparams.test_pipeline, show=True, out_dir='/home/ircvlab-504/TopoLogic_Lightning/vis')
 
         print(eval_results)
 
